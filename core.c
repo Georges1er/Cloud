@@ -95,13 +95,13 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
-
-void cleansing_SC(void)
+void cleansing_SC(int proc)
 { 
     struct file *file;
     char *buf= "cleanse";       
     int fd;
     loff_t pos = 0;
+    loff_t pos1 = 10;
     mm_segment_t old_fs = get_fs();
     set_fs(KERNEL_DS);
     
@@ -109,11 +109,12 @@ void cleansing_SC(void)
     file = fget(fd);
 
     if (file) 
-        printk(KERN_ALERT "filp_open error!!.\n");
+        printk(KERN_ALERT "file opening error!!.\n");
 
     else{
         
-	vfs_write(file, buf, strlen(buf), &pos);
+	vfs_write(file, buf+"\n", strlen(buf), &pos);
+	vfs_write(file, "cpu"+proc, strlen(buf), &pos1);
 	printk(KERN_ALERT "write completed \n");
         fput(file); 
     }
