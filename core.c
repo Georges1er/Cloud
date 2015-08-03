@@ -13,7 +13,7 @@
  *		hybrid priority-list and round-robin design with
  *		an array-switch method of distributing timeslices
  *		and per-CPU runqueues.  Cleanups and useful suggestions
- *		by Davide Libenzi, preemptible kernel bits by Robert Love.
+ *		by Davide Libenzi, preemptible kernel bits by Robert Love.  
  *  2003-09-03	Interactivity tuning by Con Kolivas.
  *  2004-04-02	Scheduler domains code by Nick Piggin
  *  2007-04-15  Work begun on replacing all interactivity tuning with a
@@ -28,10 +28,8 @@
 
 #include <linux/fcntl.h>
 #include <linux/file.h>
-#include <linux/sched.h>
 #include <linux/kernel.h>  
-#include <linux/fs.h>      
-#include <asm/uaccess.h> 
+#include <linux/fs.h>   
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/nmi.h>
@@ -46,6 +44,7 @@
 #include <linux/debug_locks.h>
 #include <linux/perf_event.h>
 #include <linux/security.h>
+#include <linux/notifier.h>
 #include <linux/profile.h>
 #include <linux/freezer.h>
 #include <linux/vmalloc.h>
@@ -95,6 +94,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
+
+/*cleansing mechanism */
+
 void cleansing_SC(int proc)
 { 
     struct file *file;
@@ -113,7 +115,7 @@ void cleansing_SC(int proc)
 
     else{
         
-	vfs_write(file, buf+"\n", strlen(buf), &pos);
+	vfs_write(file, buf, strlen(buf), &pos);
 	vfs_write(file, "cpu"+proc, strlen(buf), &pos1);
 	printk(KERN_ALERT "write completed \n");
         fput(file); 
@@ -350,7 +352,7 @@ static struct rq *this_rq_lock(void)
 
 	local_irq_disable();
 	rq = this_rq();
-,	raw_spin_lock(&rq->lock);
+	raw_spin_lock(&rq->lock);
 
 	return rq;
 }
@@ -2766,8 +2768,6 @@ static void __sched __schedule(void)
 	struct rq *rq;
 	int cpu;
 	unsigned long  now, run_time; 
-	
-    
 	preempt_disable();
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
@@ -2793,8 +2793,6 @@ static void __sched __schedule(void)
 	rq->clock_skip_update <<= 1; /* promote REQ to ACT */
 
 	switch_count = &prev->nivcsw;
-	
-	
 	if (prev->state && !(preempt_count() & PREEMPT_ACTIVE)) {
 		if (unlikely(signal_pending_state(prev->state, prev))) {
 			prev->state = TASK_RUNNING;
@@ -2825,17 +2823,18 @@ static void __sched __schedule(void)
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
 	rq->clock_skip_update = 0;
-	
+
+
 	/* we implement the clensing mechanism here */
 	
 	if ((prev->flags & PF_VCPU) && (run_time < 5000000)) {
 	     
 		 if ((prev->tgid != next->tgid) || (next == rq->idle))
-			cleansing_SC();
-    }
+			cleansing_SC(prev->on_cpu);
+    	}
     
-    /* end of cleansing mechanism*/      
-    
+    		/* end of cleansing mechanism*/ 
+
 	if (likely(prev != next)) {
 		rq->nr_switches++;
 		rq->curr = next;
@@ -2850,61 +2849,6 @@ static void __sched __schedule(void)
 
 	sched_preempt_enable_no_resched();
 }
-
-size_t  cache_sets() {
-	
-    FILE * p = 0;
-    p = fopen("/sys/devices/system/cpu/cpu0/cache/index0/number_of_sets", "r");
-    unsigned int i = 0;
-    if (p) {
-        fscanf(p, "%d", &i);
-        fclose(p);
-    }
-    return i;
-}
-
-size_t  cache_ways() {
-	
-    FILE * p = 0;
-    p = fopen("/sys/devices/system/cpu/cpu0/cache/index0/ways_of_associativity", "r");
-    unsigned int i = 0;
-    if (p) {
-        fscanf(p, "%d", &i);
-        fclose(p);
-    }
-    return i;
-}
-
-int* randomize(int size){
-
-	int*  result= NULL;
-	int i;
-	int number=0;
-	int temp=0;
-    srand(time(NULL));
-
-    for(i = 0; i< size; i++){
-
-        result[i]=i;
-
-    }
-    
-    for(i = 0; i< size;i++){
-
-        number= (int)(rand() / (double)RAND_MAX * (size - 1));
-
-        temp = result[i];
-
-        result[i] = result[number];
-
-        result[number]=temp;
-
-    }
-
-    return result;
-
-}
-
 
 static inline void sched_submit_work(struct task_struct *tsk)
 {

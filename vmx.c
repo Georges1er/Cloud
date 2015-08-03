@@ -7256,7 +7256,7 @@ static int handle_rdtsc(struct kvm_vcpu *vcpu)
     return 1;
   }
 
-  vcpu->run->exit_reason = KVM_EXIT_RDTSC;
+  vcpu->run->exit_reason = EXIT_REASON_RDTSC;
   vcpu->arch.regs[VCPU_REGS_RAX] = data & -1u;
   vcpu->arch.regs[VCPU_REGS_RDX] = (data >> 32) & -1u;
   skip_emulated_instruction(vcpu);
